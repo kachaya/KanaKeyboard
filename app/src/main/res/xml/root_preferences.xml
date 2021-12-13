@@ -1,0 +1,16 @@
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+    <PreferenceCategory app:title="入力設定">
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="start_kana"
+            app:summaryOff="英数字入力モード"
+            app:summaryOn="日本語入力モード"
+            app:title="開始時の入力モード" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="shift_toggle"
+            app:summaryOff="通常、一時シフト、シフトロックを循環"
+            app:summaryOn="通常、シフトロックをトグル"
+            app:title="シフトキーの動作" />
+    </PreferenceCategory>
+</PreferenceScreen>
