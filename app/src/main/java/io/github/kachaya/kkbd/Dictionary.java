@@ -22,7 +22,6 @@ import java.util.zip.ZipInputStream;
 
 public class Dictionary {
     private static final String MAP_NAME = "dic";
-    private final String TAG = "Dictionary";
     private final Context mContext;
     private final String mFilesDirPath;
 

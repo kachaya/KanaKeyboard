@@ -12,10 +12,7 @@ import android.view.inputmethod.InputConnection;
 import androidx.preference.PreferenceManager;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
 public class InputService extends InputMethodService {
 
@@ -28,16 +25,22 @@ public class InputService extends InputMethodService {
     public final static int SHIFT_STATE_SINGLE = 1;
     public final static int SHIFT_STATE_LOCK = 2;
     private final static int SHIFT_STATE_NUM = 3;
-    private final String TAG = "InputService";
+
+    //
     private final StringBuilder mComposing = new StringBuilder();
+
+    // 候補
     private final ArrayList<String> mCandidateKey = new ArrayList<>();    // 辞書検索キー
-    private final ArrayList<String> mCandidateValue = new ArrayList<>();   // 表示用
+    private final ArrayList<String> mCandidateValue = new ArrayList<>();   // 辞書登録語句
+    private final ArrayList<String> mCandidateText = new ArrayList<>();   // 表示用
+    private int mCandidateNum;
+    private int mCandidateIndex;
+    //
     private int mInputMode;
     private int mShiftState;
     private boolean mShiftToggle;
     private InputView mInputView;
     private Dictionary mDictionary;
-    private int mCandidateIndex = -1;
 
     @Override
     public void onCreate() {
@@ -77,7 +80,7 @@ public class InputService extends InputMethodService {
     @Override
     public void onFinishInput() {
         //Log.d(TAG, "onFinishInput");
-        startHalfLatinMode();
+        startLatinHalfMode();
         mDictionary.commit();
         super.onFinishInput();
     }
@@ -85,7 +88,7 @@ public class InputService extends InputMethodService {
     @Override
     public void onFinishInputView(boolean finishingInput) {
         //Log.d(TAG, "onFinishInputView finishingInput=" + finishingInput);
-        startHalfLatinMode();
+        startLatinHalfMode();
         super.onFinishInputView(finishingInput);
     }
 
@@ -123,36 +126,43 @@ public class InputService extends InputMethodService {
             }
         }
         if (startKana) {
-            startHiraganaMode();
+            startHiraganaWideMode();
         } else {
-            startHalfLatinMode();
+            startLatinHalfMode();
         }
     }
 
-    private void startHalfLatinMode() {
+    private void startLatinHalfMode() {
         resetComposing();
         mInputMode = INPUT_MODE_QWERTY_HALF;
         mShiftState = SHIFT_STATE_NONE;
         mInputView.setKeyboard(mInputMode, mShiftState);
     }
 
-    private void startWideLatinMode() {
+    private void startLatinWideMode() {
         resetComposing();
         mInputMode = INPUT_MODE_QWERTY_WIDE;
         mShiftState = SHIFT_STATE_NONE;
         mInputView.setKeyboard(mInputMode, mShiftState);
     }
 
-    private void startHiraganaMode() {
+    private void startHiraganaWideMode() {
         resetComposing();
         mInputMode = INPUT_MODE_HIRAGANA_WIDE;
         mShiftState = SHIFT_STATE_NONE;
         mInputView.setKeyboard(mInputMode, mShiftState);
     }
 
-    private void startKatakanaMode() {
+    private void startKatakanaWideMode() {
         resetComposing();
         mInputMode = INPUT_MODE_KATAKANA_WIDE;
+        mShiftState = SHIFT_STATE_NONE;
+        mInputView.setKeyboard(mInputMode, mShiftState);
+    }
+
+    private void startKatakanaHalfMode() {
+        resetComposing();
+        mInputMode = INPUT_MODE_KATAKANA_HALF;
         mShiftState = SHIFT_STATE_NONE;
         mInputView.setKeyboard(mInputMode, mShiftState);
     }
@@ -160,13 +170,7 @@ public class InputService extends InputMethodService {
     private void icCommitText(CharSequence cs) {
         InputConnection ic = getCurrentInputConnection();
         if (ic != null) {
-            String text;
-            if (mInputMode == INPUT_MODE_KATAKANA_WIDE) {
-                text = Converter.toWideKatakana(cs);
-            } else {
-                text = cs.toString();
-            }
-            ic.commitText(text, 1);
+            ic.commitText(cs, 1);
         }
     }
 
@@ -177,13 +181,7 @@ public class InputService extends InputMethodService {
     private void icSetComposingText(CharSequence cs) {
         InputConnection ic = getCurrentInputConnection();
         if (ic != null) {
-            String text;
-            if (mInputMode == INPUT_MODE_KATAKANA_WIDE) {
-                text = Converter.toWideKatakana(cs);
-            } else {
-                text = cs.toString();
-            }
-            ic.setComposingText(text, 1);
+            ic.setComposingText(cs, 1);
         }
     }
 
@@ -221,8 +219,7 @@ public class InputService extends InputMethodService {
 
         // 候補選択済みで新しい文字が入力されたら確定
         if (mCandidateIndex >= 0) {
-            icCommitText(mCandidateValue.get(mCandidateIndex));
-            addDictionary(mComposing, mCandidateValue.get(mCandidateIndex));
+            commitCandidate();
             resetComposing();
         }
 
@@ -252,7 +249,6 @@ public class InputService extends InputMethodService {
         }
         updateSuggestion();
     }
-
 
     // スペースキー
     public void handleSpace() {
@@ -284,51 +280,52 @@ public class InputService extends InputMethodService {
 
     // キーボード切り替え
     public void handleKeyboard() {
-        //Log.d(TAG, "handleKeyboard");
+        if (mCandidateIndex >= 0) {
+            commitCandidate();
+        } else {
+            icCommitText(mComposing);
+        }
         switch (mInputMode) {
             case INPUT_MODE_QWERTY_HALF:
             case INPUT_MODE_QWERTY_WIDE:
-                mInputMode = INPUT_MODE_HIRAGANA_WIDE;
+                startHiraganaWideMode();
                 break;
             case INPUT_MODE_HIRAGANA_WIDE:
             case INPUT_MODE_KATAKANA_WIDE:
             case INPUT_MODE_KATAKANA_HALF:
-                mInputMode = INPUT_MODE_QWERTY_HALF;
+                startLatinHalfMode();
                 break;
             default:
                 break;
-
         }
-        resetComposing();
-        mShiftState = SHIFT_STATE_NONE;     // Shift状態はリセット
-        mInputView.setKeyboard(mInputMode, mShiftState);
     }
 
     // 入力モード切り替え
     public void handleMode() {
-        //Log.d(TAG, "handleMode");
+        if (mCandidateIndex >= 0) {
+            commitCandidate();
+        } else {
+            icCommitText(mComposing);
+        }
         switch (mInputMode) {
             case INPUT_MODE_QWERTY_HALF:
-                mInputMode = INPUT_MODE_QWERTY_WIDE;    // a1→Ｗ
+                startLatinWideMode();
                 break;
             case INPUT_MODE_QWERTY_WIDE:
-                mInputMode = INPUT_MODE_QWERTY_HALF;    // Ｗ→a1
+                startLatinHalfMode();
                 break;
             case INPUT_MODE_HIRAGANA_WIDE:
-                mInputMode = INPUT_MODE_KATAKANA_WIDE;  // あ→ア
+                startKatakanaWideMode();
                 break;
             case INPUT_MODE_KATAKANA_WIDE:
-                mInputMode = INPUT_MODE_KATAKANA_HALF;  // ア→ｶﾅ
+                startKatakanaHalfMode();
                 break;
             case INPUT_MODE_KATAKANA_HALF:
-                mInputMode = INPUT_MODE_HIRAGANA_WIDE;  // ｶﾅ→あ
+                startHiraganaWideMode();
                 break;
             default:
                 break;
         }
-        resetComposing();
-        mShiftState = SHIFT_STATE_NONE;     // Shift状態はリセット
-        mInputView.setKeyboard(mInputMode, mShiftState);
     }
 
     // Shift
@@ -396,45 +393,25 @@ public class InputService extends InputMethodService {
             icSendEnterKey();
         } else {
             if (mCandidateIndex >= 0) {
-                // 辞書変換中
-                clickCandidate(mCandidateIndex);
+                commitCandidate();
             } else {
                 icCommitText(mComposing);
-                addDictionary(mComposing, mComposing);
-                resetComposing();
             }
-        }
-    }
-
-    // 入力ビューからの候補ボタンクリックは確定
-    public void clickCandidate(int index) {
-        //Log.d(TAG, "clickCandidate(" + index + ")");
-        int num = mCandidateValue.size();
-        if (index < num) {
-            mCandidateIndex = index;
-            String key = mCandidateKey.get(index);
-            String value = mCandidateValue.get(index);
-            icCommitText(value);
-            addDictionary(key, value);
             resetComposing();
         }
     }
 
     private void selectNextCandidate() {
-        //Log.d("selectNextCandidate", "mCandidateIndex=" + mCandidateIndex);
-        int num = mCandidateValue.size();
-        if (num > 0) {
-            mCandidateIndex = (mCandidateIndex + 1) % num;  // 次候補
+        if (mCandidateNum > 0) {
+            mCandidateIndex = (mCandidateIndex + 1) % mCandidateNum;  // 次候補
             icSetComposingText(mCandidateValue.get(mCandidateIndex));
             mInputView.selectCandidate(mCandidateIndex);
         }
     }
 
     private void selectPrevCandidate() {
-        //Log.d("selectPrevCandidate", "mCandidateIndex=" + mCandidateIndex);
-        int num = mCandidateValue.size();
-        if (num > 0) {
-            mCandidateIndex = (mCandidateIndex + num - 1) % num;    // 前候補
+        if (mCandidateNum > 0) {
+            mCandidateIndex = (mCandidateIndex + mCandidateNum - 1) % mCandidateNum;    // 前候補
             icSetComposingText(mCandidateValue.get(mCandidateIndex));
             mInputView.selectCandidate(mCandidateIndex);
         }
@@ -448,72 +425,118 @@ public class InputService extends InputMethodService {
     }
 
     private void resetCandidate() {
+        mCandidateNum = 0;
         mCandidateIndex = -1;   // 未選択
         mCandidateKey.clear();
         mCandidateValue.clear();
+        mCandidateText.clear();
         mInputView.clearCandidates();
     }
 
-    private void addCandidate(String key, String value) {
-        //Log.d("addCandidate", "key=" + key + ",value=" + value);
-        if (mCandidateValue.contains(value)) {
-            //Log.d("contains", "key=" + key + ",value=" + value);
-            return;
+    private void addCandidate(String key, String value, String text) {
+        if (!mCandidateText.contains(text)) {
+            mCandidateKey.add(key);
+            mCandidateValue.add(value);
+            mCandidateText.add(text);
         }
-        mCandidateKey.add(key);
-        mCandidateValue.add(value);
     }
 
+    private void addCandidate(int index, String key, String value, String text) {
+        if (!mCandidateText.contains(text)) {
+            mCandidateKey.add(index, key);
+            mCandidateValue.add(index, value);
+            mCandidateText.add(index, text);
+        }
+    }
+
+    private void commitCandidate() {
+        String key = mCandidateKey.get(mCandidateIndex);
+        String value = mCandidateValue.get(mCandidateIndex);
+        String text = mCandidateText.get(mCandidateIndex);
+        mDictionary.add(key, value);
+        icCommitText(text);
+    }
+
+    // 入力ビューからの候補ボタンクリックは確定
+    public void clickCandidate(int index) {
+        mCandidateIndex = index;
+        commitCandidate();
+        resetComposing();
+    }
+
+    // 提案
     private void updateSuggestion() {
-        resetCandidate();
+        ArrayList<String> keys;
+
         String hiragana = Converter.toWideHiragana(mComposing);
         String katakana = Converter.toWideKatakana(hiragana);
+        String text;
 
-        addCandidate(hiragana, hiragana);
-        addCandidate(hiragana, katakana);
+        resetCandidate();
 
-        ArrayList<String> keys = mDictionary.getUserKeys(hiragana);
+        addCandidate(hiragana, hiragana, hiragana);
+        addCandidate(hiragana, katakana, katakana);
+
+        // ユーザ辞書から
+        keys = mDictionary.getUserKeys(hiragana);
         keys.sort(Comparator.comparingInt(String::length).reversed().thenComparing(Comparator.naturalOrder()));
 
         for (int i = 0; i < keys.size(); i++) {
             String key = keys.get(i);
             char ch = key.charAt(key.length() - 1);
             if (ch >= 'a' && ch <= 'z') {
-                continue;   // 送りあり
+                continue;   // 送りなしエントリだけが対象
             }
             String[] values = mDictionary.searchUserDic(key);
-            for (String value : values) {
-                addCandidate(key, value);
+            if (values != null) {
+                for (String value : values) {
+                    text = value;
+                    if (mInputMode == INPUT_MODE_KATAKANA_WIDE) {
+                        text = Converter.toWideKatakana(text);
+                    }
+                    addCandidate(key, value, text);
+                }
             }
         }
 
-        mInputView.setCandidates(mCandidateValue);
+        mCandidateIndex = -1;
+        mCandidateNum = mCandidateText.size();
+        mInputView.setCandidates(mCandidateText);
         icSetComposingText(mComposing);
+
         mInputView.setSpaceButtonLabel("変換");
     }
 
     private void startConversion() {
         resetCandidate();
 
-        String hiragana = Converter.toWideHiragana(mComposing);
-        String katakana = Converter.toWideKatakana(hiragana);
-        Set<String> lhs = new LinkedHashSet<>();
-        String[] ss;
-        int len = hiragana.length();
+        String key;
+        int len;
         String firstKey;
         String secondKey;
         String ascii;
         String okuri;
+        String[] values;
+        String text;
 
-        // 入力したものそのままでユーザ辞書検索
-        ss = mDictionary.searchUserDic(hiragana);
-        if (ss != null) {
-            lhs.addAll(Arrays.asList(ss));
+        key = Converter.toWideHiragana(mComposing);
+        len = key.length();
+
+        // 入力したものでユーザ辞書検索
+        values = mDictionary.searchUserDic(key);
+        if (values != null) {
+            for (String value : values) {
+                text = value;
+                if (mInputMode == INPUT_MODE_KATAKANA_WIDE) {
+                    text = Converter.toWideKatakana(text);
+                }
+                addCandidate(key, value, text);
+            }
         }
-        // 後ろから分割して辞書検索(ユーザ辞書)
+        // 後ろから分割してユーザ辞書検索
         for (int pos = len - 1; pos > 0; pos--) {
-            firstKey = hiragana.substring(0, pos);
-            secondKey = hiragana.substring(pos, len);
+            firstKey = key.substring(0, pos);
+            secondKey = key.substring(pos, len);
             if (secondKey.charAt(0) == 'っ') {
                 if (secondKey.length() >= 2) {
                     okuri = secondKey.substring(0, 2);
@@ -525,30 +548,44 @@ public class InputService extends InputMethodService {
             }
             ascii = Converter.getOkuriAscii(okuri);
             if (ascii != null) {
-                ss = mDictionary.searchUserDic(firstKey + ascii);
-                if (ss != null) {
-                    for (String s : ss) {
-                        lhs.add(s + secondKey);
+                values = mDictionary.searchUserDic(firstKey + ascii);
+                if (values != null) {
+                    for (String value : values) {
+                        text = value + secondKey;
+                        if (mInputMode == INPUT_MODE_KATAKANA_WIDE) {
+                            text = Converter.toWideKatakana(text);
+                        }
+                        addCandidate(key, value + secondKey, text);
                     }
                 }
             }
-            ss = mDictionary.searchUserDic(firstKey);
-            if (ss != null) {
-                for (String s : ss) {
-                    lhs.add(s + secondKey);
+            values = mDictionary.searchUserDic(firstKey);
+            if (values != null) {
+                for (String value : values) {
+                    text = value + secondKey;
+                    if (mInputMode == INPUT_MODE_KATAKANA_WIDE) {
+                        text = Converter.toWideKatakana(text);
+                    }
+                    addCandidate(firstKey, value, text);
                 }
             }
         }
 
         // 入力したものそのままでメイン辞書検索
-        ss = mDictionary.searchMainDic(hiragana);
-        if (ss != null) {
-            lhs.addAll(Arrays.asList(ss));
+        values = mDictionary.searchMainDic(key);
+        if (values != null) {
+            for (String value : values) {
+                text = value;
+                if (mInputMode == INPUT_MODE_KATAKANA_WIDE) {
+                    text = Converter.toWideKatakana(text);
+                }
+                addCandidate(key, value, text);
+            }
         }
-        // 後ろから分割して辞書検索(メイン辞書)
+        // 後ろから分割してメイン辞書検索
         for (int pos = len - 1; pos > 0; pos--) {
-            firstKey = hiragana.substring(0, pos);
-            secondKey = hiragana.substring(pos, len);
+            firstKey = key.substring(0, pos);
+            secondKey = key.substring(pos, len);
             if (secondKey.charAt(0) == 'っ') {
                 if (secondKey.length() >= 2) {
                     okuri = secondKey.substring(0, 2);
@@ -560,45 +597,42 @@ public class InputService extends InputMethodService {
             }
             ascii = Converter.getOkuriAscii(okuri);
             if (ascii != null) {
-                ss = mDictionary.searchMainDic(firstKey + ascii);
-                if (ss != null) {
-                    for (String s : ss) {
-                        lhs.add(s + secondKey);
+                // 送りあり
+                values = mDictionary.searchMainDic(firstKey + ascii);
+                if (values != null) {
+                    for (String value : values) {
+                        text = value + secondKey;
+                        if (mInputMode == INPUT_MODE_KATAKANA_WIDE) {
+                            text = Converter.toWideKatakana(text);
+                        }
+                        addCandidate(firstKey + okuri, value + okuri, text);
                     }
                 }
             }
-            ss = mDictionary.searchMainDic(firstKey);
-            if (ss != null) {
-                for (String s : ss) {
-                    lhs.add(s + secondKey);
+            // 送りなし
+            values = mDictionary.searchMainDic(firstKey);
+            if (values != null) {
+                for (String value : values) {
+                    text = value + secondKey;
+                    if (mInputMode == INPUT_MODE_KATAKANA_WIDE) {
+                        text = Converter.toWideKatakana(text);
+                    }
+                    addCandidate(firstKey, value, text);
                 }
             }
         }
-        //Log.d("startConversion", lhs.toString());
 
-        if (!lhs.contains(hiragana)) {
-            addCandidate(hiragana, hiragana);
-        }
-        if (!lhs.contains(katakana)) {
-            addCandidate(hiragana, katakana);
-        }
-        for (String s : lhs) {
-            addCandidate(hiragana, s);
-        }
-        //Log.d("startConversion2", mCandidateValue.toString());
+        text = Converter.toWideKatakana(key);
+        addCandidate(0, key, text, text);
+        addCandidate(0, key, key, key);
 
-        mInputView.setCandidates(mCandidateValue);
+        mCandidateNum = mCandidateText.size();
+        mInputView.setCandidates(mCandidateText);
+
         mCandidateIndex = 0;
         mInputView.selectCandidate(mCandidateIndex);
-        icSetComposingText(mCandidateValue.get(mCandidateIndex));
+        icSetComposingText(mCandidateText.get(mCandidateIndex));
 
         mInputView.setSpaceButtonLabel("選択");
-    }
-
-    private void addDictionary(CharSequence key, CharSequence val) {
-        String yomi = Converter.toWideHiragana(key);
-        String kanji = val.toString();
-        //Log.d("addDictionary", "key=" + key + ",val=" + val + ",yomi=" + yomi + ",kanji=" + kanji);
-        mDictionary.add(yomi, kanji);
     }
 }
