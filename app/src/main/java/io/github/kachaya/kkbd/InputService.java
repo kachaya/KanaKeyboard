@@ -464,6 +464,14 @@ public class InputService extends InputMethodService {
         resetComposing();
     }
 
+    // 候補長押しで削除
+    public void longClickCandidate(int index) {
+        String key = mCandidateKey.get(index);
+        String value = mCandidateValue.get(index);
+        mDictionary.delete(key, value);
+        updateSuggestion();
+    }
+
     // 提案
     private void updateSuggestion() {
         ArrayList<String> keys;

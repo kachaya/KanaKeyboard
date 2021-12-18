@@ -94,6 +94,32 @@ public class Dictionary {
         mUserDicMap.put(key, sb.toString());
     }
 
+    public boolean delete(CharSequence keyword, String kanji) {
+        String key = keyword.toString();
+        String oldVal = mUserDicMap.get(key);
+        if (oldVal == null) {
+            return false;
+        }
+        StringBuilder sb = new StringBuilder();
+        String[] ss = oldVal.split("\t");
+        for (String s : ss) {
+            if (!kanji.equals(s)) {
+                if (sb.length() != 0) {
+                    sb.append("\t");
+                }
+                sb.append(s);
+            }
+        }
+        String newVal = sb.toString();
+        if (newVal.length() == 0) {
+            mUserDicMap.remove(key);
+        } else {
+            mUserDicMap.put(key, newVal);
+        }
+        commit();
+        return true;
+    }
+
     // 候補検索
     public String[] searchMainDic(@NonNull CharSequence keyword) {
         String key = keyword.toString();

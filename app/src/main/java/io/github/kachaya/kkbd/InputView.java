@@ -269,9 +269,16 @@ public class InputView extends LinearLayout {
     }
 
     // 候補ボタンクリックハンドラ
-    private void onClickCandidateButton(Button b) {
-        int index = (int) b.getTag();
+    private void onClickCandidateButton(Button v) {
+        int index = (int) v.getTag();
         mInputService.clickCandidate(index);
+    }
+
+    // 候補ボタン長押しハンドラ
+    private boolean onLongClickCandidateButton(Button v) {
+        int index = (int) v.getTag();
+        mInputService.longClickCandidate(index);
+        return true;
     }
 
     public void clearCandidates() {
@@ -290,6 +297,7 @@ public class InputView extends LinearLayout {
         for (int i = 0; i < candidates.size(); i++) {
             Button b = new Button(new ContextThemeWrapper(mContext, style), null, style);
             b.setOnClickListener(v -> onClickCandidateButton((Button) v));
+            b.setOnLongClickListener(v -> onLongClickCandidateButton((Button) v));
             b.setTag(i);
             b.setText(candidates.get(i));
             b.setBackgroundColor(mColorCandidateNormal);
